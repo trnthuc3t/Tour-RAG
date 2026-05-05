@@ -1,12 +1,12 @@
 # Tour RAG Chatbot Service
 
-RAG-based chatbot service for answering questions about tour products using vector similarity search and OpenAI GPT.
+RAG-based chatbot service for answering questions about tour products using vector similarity search and Gemini API.
 
 ## Features
 
-- **Vector Embedding**: Uses OpenAI embeddings to convert tour data into vector representations
+- **Vector Embedding**: Uses Gemini embeddings to convert tour data into vector representations
 - **Similarity Search**: PostgreSQL + pgvector for efficient similarity search
-- **LLM Integration**: Uses OpenAI GPT for generating contextual answers
+- **LLM Integration**: Uses Gemini models for generating contextual answers
 - **Chat History**: Tracks user interactions for analytics and improvement
 - **FastAPI**: Modern async API server
 - **Auto Ingest**: CLI script to ingest tours from Odoo
@@ -34,7 +34,7 @@ React Frontend
 - Python 3.10+
 - PostgreSQL 16+ (with pgvector extension)
 - Odoo 18.0
-- OpenAI API key
+- Gemini API key
 
 ### 2. Install Dependencies
 
@@ -53,9 +53,10 @@ cp .env.example .env
 
 Edit `.env` with your settings:
 ```
-OPENAI_API_KEY=sk-your-key-here
+GEMINI_API_KEY=your-gemini-api-key
 DB_HOST=localhost
 DB_PORT=5433
+DB_NAME=rag_service
 ODOO_URL=http://localhost:8069
 ```
 
@@ -65,7 +66,7 @@ The service will automatically create the `pgvector` extension and required tabl
 
 Or manually run:
 ```bash
-psql -h localhost -p 5433 -U openpg -d odoo -f ../config/setup_pgvector.sql
+psql -h localhost -p 5433 -U openpg -d rag_service -f ../config/setup_pgvector.sql
 ```
 
 ### 5. Ingest Tours Data
@@ -80,7 +81,7 @@ python ingest.py
 This will:
 - Fetch all tours from Odoo API (`/api/tours`)
 - Split text into chunks
-- Generate embeddings using OpenAI
+- Generate embeddings using Gemini
 - Save to PostgreSQL + pgvector
 
 ### 6. Start the Service
@@ -169,8 +170,9 @@ Key settings in `config.py`:
 - `CHUNK_OVERLAP`: Overlap between chunks (default: 100 chars)
 - `TOP_K_RETRIEVAL`: Documents to retrieve initially (default: 5)
 - `RERANK_TOP_K`: Documents to use for generation (default: 3)
-- `OPENAI_MODEL`: GPT model to use (default: gpt-3.5-turbo)
-- `OPENAI_EMBEDDING_MODEL`: Embedding model (default: text-embedding-3-small)
+- `GEMINI_MODEL`: Gemini model to use (default: gemini-1.5-flash)
+- `GEMINI_EMBEDDING_MODEL`: Embedding model (default: models/text-embedding-004)
+- `EMBEDDING_DIMENSION`: Vector dimension in pgvector (default: 768)
 
 ## File Structure
 
@@ -182,7 +184,7 @@ rag-service/
 ├── db.py                # Database connection & queries
 ├── odoo_client.py       # Odoo API client
 ├── chunking.py          # Text chunking utilities
-├── embeddings.py        # OpenAI embedding generation
+├── embeddings.py        # Gemini embedding generation
 ├── rag.py               # RAG engine (retrieve + generate)
 ├── ingest.py            # Tour ingest script
 ├── requirements.txt     # Python dependencies
@@ -224,7 +226,7 @@ Chat history is logged to `tour_chat_history` table with:
 - `question`: User's question
 - `answer`: Generated answer
 - `source_tour_ids`: Tour IDs used in answer
-- `tokens_used`: OpenAI API token count
+- `tokens_used`: Gemini token count (optional)
 - `created_at`: Timestamp
 
 Query to see top questions:
@@ -241,7 +243,7 @@ LIMIT 10;
 ### "pgvector extension not found"
 ```bash
 # Connect to PostgreSQL and enable
-psql -U openpg -d odoo
+psql -U openpg -d rag_service
 CREATE EXTENSION pgvector;
 ```
 
@@ -250,10 +252,10 @@ CREATE EXTENSION pgvector;
 - Check API endpoint: `curl http://localhost:8069/api/tours`
 - Ensure tours exist in Odoo (type=combo, sale_ok=True)
 
-### "OpenAI API rate limit"
+### "Gemini API rate limit"
 - Reduce `CHUNK_SIZE` to generate fewer chunks
 - Add retry logic in `embeddings.py`
-- Check OpenAI account usage
+- Check Gemini API quota and usage in Google AI Studio
 
 ## Next Steps
 

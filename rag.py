@@ -1,20 +1,16 @@
 """RAG (Retrieval Augmented Generation) logic"""
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import SystemMessage, HumanMessage
-from config import OPENAI_API_KEY, OPENAI_MODEL, SYSTEM_PROMPT, TOP_K_RETRIEVAL, RERANK_TOP_K
+from __future__ import annotations
+from typing import List, Dict
+import google.generativeai as genai
+from config import GEMINI_API_KEY, GEMINI_MODEL, SYSTEM_PROMPT, TOP_K_RETRIEVAL, RERANK_TOP_K
 from embeddings import get_embedding
 from db import Database
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 
-# Initialize LangChain LLM
-llm = ChatOpenAI(
-    openai_api_key=OPENAI_API_KEY,
-    model=OPENAI_MODEL,
-    temperature=0.7,
-)
+genai.configure(api_key=GEMINI_API_KEY)
+llm = genai.GenerativeModel(GEMINI_MODEL)
 
 
 class RAGEngine:
@@ -22,28 +18,16 @@ class RAGEngine:
         self.db = Database()
         self.llm = llm
 
-    def retrieve_documents(self, query: str, top_k: int = TOP_K_RETRIEVAL) -> list:
-        """
-        Retrieve relevant documents for query.
-        
-        Args:
-            query: User question
-            top_k: Number of documents to retrieve
-        
-        Returns:
-            List of retrieved documents with scores
-        """
+    def retrieve_documents(self, query: str, top_k: int = TOP_K_RETRIEVAL) -> List[Dict]:
+        """Retrieve nearest tour chunks for a user query."""
         try:
-            # Get query embedding
-            query_embedding = get_embedding(query)
+            query_embedding = get_embedding(query, task_type='retrieval_query')
             if not query_embedding:
                 logger.error("Failed to generate query embedding")
                 return []
             
-            # Search similar embeddings
             results = self.db.search_embeddings(query_embedding, top_k=top_k)
             
-            # Format results
             documents = []
             for result in results:
                 documents.append({
@@ -60,37 +44,14 @@ class RAGEngine:
             logger.error(f"Error retrieving documents: {e}")
             return []
 
-    def rerank_documents(self, documents: list, query: str, top_k: int = RERANK_TOP_K) -> list:
-        """
-        Re-rank documents based on relevance (simple version).
-        In production, use Cohere reranker or similar.
-        
-        Args:
-            documents: List of documents
-            query: User query
-            top_k: Top K to return
-        
-        Returns:
-            Re-ranked documents
-        """
-        # For now, just return top-k by similarity score
-        # In future, can use more sophisticated re-ranking
+    def rerank_documents(self, documents: List[Dict], query: str, top_k: int = RERANK_TOP_K) -> List[Dict]:
+        """Return top-k documents ordered by similarity score."""
         sorted_docs = sorted(documents, key=lambda x: x['similarity'], reverse=True)
         return sorted_docs[:top_k]
 
     def generate_answer(self, query: str, documents: list) -> str:
-        """
-        Generate answer using LLM based on retrieved documents.
-        
-        Args:
-            query: User question
-            documents: Retrieved documents
-        
-        Returns:
-            Generated answer
-        """
+        """Generate a final answer from the retrieved tour context."""
         try:
-            # Build context from documents
             context = "\n\n".join([
                 f"**{doc['tour_name']}** (Điểm đến: {doc['metadata'].get('category', 'N/A')})\n"
                 f"Giá: {doc['metadata'].get('price', 'N/A')} {doc['metadata'].get('currency', 'VND')}\n"
@@ -98,22 +59,21 @@ class RAGEngine:
                 for doc in documents
             ])
             
-            # Build messages
-            messages = [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=f"""Dựa trên thông tin du lịch dưới đây, hãy trả lời câu hỏi của khách hàng:
+            prompt = f"""{SYSTEM_PROMPT}
+
+Dựa trên thông tin du lịch dưới đây, hãy trả lời câu hỏi của khách hàng:
 
 Thông tin du lịch:
 {context}
 
 Câu hỏi: {query}
 
-Hãy trả lời bằng tiếng Việt, thân thiện và cung cấp thông tin chi tiết từ dữ liệu trên.""")
-            ]
-            
-            # Generate response
-            response = self.llm.invoke(messages)
-            answer = response.content
+Hãy trả lời bằng tiếng Việt, thân thiện và cung cấp thông tin chi tiết từ dữ liệu trên."""
+
+            response = self.llm.generate_content(prompt)
+            answer = (response.text or '').strip()
+            if not answer:
+                answer = 'Xin lỗi, tôi chưa tạo được câu trả lời phù hợp. Vui lòng thử lại.'
             
             logger.info(f"Generated answer for query: {query[:50]}...")
             return answer
@@ -122,17 +82,8 @@ Hãy trả lời bằng tiếng Việt, thân thiện và cung cấp thông tin 
             return "Xin lỗi, tôi không thể trả lời câu hỏi này. Vui lòng liên hệ nhân viên bán hàng để được hỗ trợ."
 
     def answer_question(self, query: str) -> dict:
-        """
-        Full RAG pipeline: retrieve -> rerank -> generate.
-        
-        Args:
-            query: User question
-        
-        Returns:
-            Dict with answer and sources
-        """
+        """Execute retrieve, rank, and generate for one user question."""
         try:
-            # Retrieve
             documents = self.retrieve_documents(query, top_k=TOP_K_RETRIEVAL)
             
             if not documents:
@@ -141,10 +92,8 @@ Hãy trả lời bằng tiếng Việt, thân thiện và cung cấp thông tin 
                     'sources': []
                 }
             
-            # Re-rank
             reranked_docs = self.rerank_documents(documents, query)
             
-            # Generate
             answer = self.generate_answer(query, reranked_docs)
             
             return {

@@ -13,18 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 async def ingest_tours(db: Database, skip_existing: bool = True) -> Tuple[int, int]:
-    """
-    Ingest tours from Odoo into vector database.
-    
-    Args:
-        db: Database instance
-        skip_existing: Skip tours that already have embeddings
-    
-    Returns:
-        Tuple of (tours_processed, chunks_created)
-    """
+    """Fetch tours from Odoo, embed chunks, and upsert into vector storage."""
     try:
-        # Get tours from Odoo
         client = OdooClient()
         tours = client.get_tours()
         
@@ -34,7 +24,6 @@ async def ingest_tours(db: Database, skip_existing: bool = True) -> Tuple[int, i
         
         logger.info(f"Starting to ingest {len(tours)} tours")
         
-        # Get existing tour IDs if skipping
         existing_tour_ids = set(db.get_all_tour_ids()) if skip_existing else set()
         
         tours_to_process = [t for t in tours if t.id not in existing_tour_ids]
@@ -42,23 +31,17 @@ async def ingest_tours(db: Database, skip_existing: bool = True) -> Tuple[int, i
         
         total_chunks = 0
         
-        # Process each tour
         for tour in tours_to_process:
             try:
-                # Clear existing embeddings for this tour
                 if not skip_existing:
                     db.clear_embeddings(tour.id)
                 
-                # Chunk tour data
                 chunks = chunk_tour_data(tour.name, tour.description, tour.detail_information)
                 
-                # Prepare texts for embedding
                 texts = [chunk['chunk_text'] for chunk in chunks]
                 
-                # Get embeddings for all chunks
                 embeddings = get_embeddings_batch(texts)
                 
-                # Save embeddings
                 for chunk, embedding in zip(chunks, embeddings):
                     if embedding:
                         metadata = {
@@ -93,7 +76,7 @@ async def ingest_tours(db: Database, skip_existing: bool = True) -> Tuple[int, i
 
 
 def run_ingest_sync():
-    """Synchronous wrapper for running ingest from CLI"""
+    """CLI entry point for tour ingestion."""
     db = Database()
     try:
         tours_processed, chunks_created = asyncio.run(ingest_tours(db, skip_existing=True))

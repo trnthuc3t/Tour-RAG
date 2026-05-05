@@ -9,20 +9,18 @@ from rag import RAGEngine
 from ingest import ingest_tours
 import time
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Global RAG engine
 rag_engine = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup and shutdown"""
+    """Initialize and dispose shared resources for the API lifecycle."""
     global rag_engine
     logger.info("Starting RAG service...")
     rag_engine = RAGEngine()
@@ -32,7 +30,6 @@ async def lifespan(app: FastAPI):
         rag_engine.db.close()
 
 
-# Create FastAPI app
 app = FastAPI(
     title="Tour RAG Chatbot",
     description="RAG-based chatbot for tour recommendations",
@@ -40,7 +37,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -52,21 +48,13 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Return service liveness state."""
     return {"status": "ok", "service": "tour-rag-chatbot"}
 
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """
-    Chat endpoint for asking questions about tours.
-    
-    Args:
-        request: ChatRequest with question
-    
-    Returns:
-        ChatResponse with answer and sources
-    """
+    """Answer a user question with retrieved tour context."""
     if not rag_engine:
         raise HTTPException(status_code=500, detail="RAG engine not initialized")
     
@@ -74,13 +62,10 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     
     try:
-        # Generate session ID if not provided
         session_id = request.session_id or str(uuid.uuid4())
         
-        # Get answer from RAG engine
         result = rag_engine.answer_question(request.question.strip())
         
-        # Save chat history
         try:
             source_tour_ids = [source['tour_id'] for source in result.get('sources', [])]
             rag_engine.db.save_chat_history(
@@ -89,12 +74,11 @@ async def chat(request: ChatRequest):
                 question=request.question,
                 answer=result['answer'],
                 source_tour_ids=source_tour_ids,
-                tokens_used=None  # Can be tracked from OpenAI API
+                tokens_used=None
             )
         except Exception as e:
             logger.warning(f"Failed to save chat history: {e}")
         
-        # Format response
         response = ChatResponse(
             answer=result['answer'],
             sources=[
@@ -120,22 +104,13 @@ async def chat(request: ChatRequest):
 
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest(request: IngestRequest):
-    """
-    Ingest tours from Odoo into vector database.
-    
-    Args:
-        request: IngestRequest with options
-    
-    Returns:
-        IngestResponse with statistics
-    """
+    """Trigger on-demand ingestion from Odoo to vector storage."""
     if not rag_engine:
         raise HTTPException(status_code=500, detail="RAG engine not initialized")
     
     try:
         start_time = time.time()
         
-        # Run ingest
         tours_processed, chunks_created = await ingest_tours(
             rag_engine.db,
             skip_existing=request.skip_existing
@@ -156,7 +131,7 @@ async def ingest(request: IngestRequest):
 
 @app.get("/status")
 async def status():
-    """Get RAG engine status"""
+    """Return readiness and current indexed tour IDs."""
     if not rag_engine:
         return {"status": "not_initialized"}
     
@@ -174,12 +149,11 @@ async def status():
 
 if __name__ == "__main__":
     import uvicorn
-    from config import SERVICE_HOST, SERVICE_PORT, SERVICE_WORKERS
+    from config import SERVICE_HOST, SERVICE_PORT
     
     uvicorn.run(
-        app,
+        "main:app",
         host=SERVICE_HOST,
         port=SERVICE_PORT,
-        workers=SERVICE_WORKERS,
         log_level="info"
     )

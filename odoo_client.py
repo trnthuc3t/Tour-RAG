@@ -14,7 +14,7 @@ class OdooClient:
         self.base_url = ODOO_URL
 
     def get_tours(self) -> List[TourData]:
-        """Fetch all tours from Odoo API"""
+        """Fetch all tours from Odoo and map them to TourData."""
         try:
             url = f"{self.base_url}/api/tours"
             response = requests.get(url, timeout=30)
@@ -37,7 +37,7 @@ class OdooClient:
             return []
 
     def get_tour_by_id(self, tour_id: int) -> Optional[TourData]:
-        """Fetch single tour by ID"""
+        """Placeholder for single-tour lookup when a dedicated endpoint exists."""
         try:
             url = f"{self.base_url}/api/products/{tour_id}"
             response = requests.get(url, timeout=30)
@@ -48,8 +48,7 @@ class OdooClient:
                 logger.error(f"Odoo API error: {data.get('message')}")
                 return None
             
-            # This endpoint returns product details, not the full tour data
-            # We'll need to map it
+            # Current endpoint shape does not match TourData yet.
             return None
         except Exception as e:
             logger.error(f"Error fetching tour {tour_id} from Odoo: {e}")

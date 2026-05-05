@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 class TourData(BaseModel):
-    """Tour data from Odoo"""
+    """Normalized tour payload returned by Odoo."""
     id: int
     name: str
     category: str
@@ -20,23 +20,23 @@ class TourData(BaseModel):
 
 
 class EmbeddingChunk(BaseModel):
-    """Chunk of text with embedding"""
+    """Text chunk metadata before embedding persistence."""
     tour_id: int
     tour_name: str
     chunk_index: int
     chunk_text: str
-    metadata: dict  # category, price, etc
+    metadata: dict
 
 
 class ChatRequest(BaseModel):
-    """User chat request"""
+    """Incoming chat request from API clients."""
     question: str
     session_id: Optional[str] = None
     user_id: Optional[int] = None
 
 
 class RetrievedDocument(BaseModel):
-    """Retrieved document from RAG"""
+    """Tour snippet returned by retrieval."""
     tour_id: int
     tour_name: str
     chunk_text: str
@@ -47,7 +47,7 @@ class RetrievedDocument(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Chat response"""
+    """API response for a chat turn."""
     answer: str
     sources: List[RetrievedDocument]
     session_id: str
@@ -55,12 +55,12 @@ class ChatResponse(BaseModel):
 
 
 class IngestRequest(BaseModel):
-    """Request to ingest tours"""
+    """Request payload for ingestion."""
     skip_existing: bool = True
 
 
 class IngestResponse(BaseModel):
-    """Response from ingest"""
+    """Result summary returned by ingestion endpoint."""
     message: str
     tours_processed: int
     chunks_created: int
