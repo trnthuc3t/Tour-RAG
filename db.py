@@ -198,6 +198,33 @@ class Database:
             logger.error(f"Error searching embeddings: {e}")
             raise
 
+    def search_embeddings_by_keyword(self, query: str, top_k: int = 5):
+        """Fallback search using lexical matching when semantic retrieval is unavailable."""
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            like_pattern = f"%{query.strip()}%"
+            cursor.execute(
+                """
+                SELECT DISTINCT ON (tour_id)
+                    id,
+                    tour_id,
+                    tour_name,
+                    chunk_index,
+                    chunk_text,
+                    metadata,
+                    0.0 AS similarity
+                FROM tour_embeddings
+                WHERE tour_name ILIKE %s OR chunk_text ILIKE %s
+                ORDER BY tour_id, chunk_index
+                LIMIT %s;
+                """,
+                (like_pattern, like_pattern, top_k),
+            )
+            return cursor.fetchall()
+        except Exception as e:
+            logger.error(f"Error searching embeddings by keyword: {e}")
+            return []
+
     def get_all_tour_ids(self):
         """Get all tour IDs that have embeddings"""
         cursor = self.conn.cursor()

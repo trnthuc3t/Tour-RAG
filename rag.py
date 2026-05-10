@@ -19,14 +19,17 @@ class RAGEngine:
         self.llm = llm
 
     def retrieve_documents(self, query: str, top_k: int = TOP_K_RETRIEVAL) -> List[Dict]:
-        """Retrieve nearest tour chunks for a user query."""
         try:
             query_embedding = get_embedding(query, task_type='retrieval_query')
-            if not query_embedding:
-                logger.error("Failed to generate query embedding")
-                return []
-            
-            results = self.db.search_embeddings(query_embedding, top_k=top_k)
+            results = []
+
+            if query_embedding:
+                results = self.db.search_embeddings(query_embedding, top_k=top_k)
+            else:
+                logger.warning("Failed to generate query embedding, switching to keyword fallback")
+
+            if not results:
+                results = self.db.search_embeddings_by_keyword(query, top_k=top_k)
             
             documents = []
             for result in results:

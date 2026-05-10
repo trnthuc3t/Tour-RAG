@@ -1,10 +1,23 @@
 """Text chunking utilities"""
 from __future__ import annotations
 from typing import List, Dict
+import html
+import re
 from config import CHUNK_SIZE, CHUNK_OVERLAP
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_text(raw_text: str) -> str:
+    if not raw_text:
+        return ''
+
+    text = html.unescape(raw_text)
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = text.replace('\xa0', ' ')
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
@@ -42,9 +55,12 @@ def chunk_tour_data(tour_name: str, description: str, detail_info: str) -> List[
     """Build ordered chunks for one tour record."""
     chunks = []
     chunk_index = 0
+    normalized_name = _normalize_text(tour_name)
+    normalized_description = _normalize_text(description)
+    normalized_detail = _normalize_text(detail_info)
     
-    if description:
-        text = f"{tour_name}\n\n{description}"
+    if normalized_description:
+        text = f"{normalized_name}\n\n{normalized_description}"
         for chunk in chunk_text(text):
             chunks.append({
                 'chunk_index': chunk_index,
@@ -52,12 +68,12 @@ def chunk_tour_data(tour_name: str, description: str, detail_info: str) -> List[
             })
             chunk_index += 1
     
-    if detail_info:
-        for chunk in chunk_text(detail_info):
+    if normalized_detail:
+        for chunk in chunk_text(normalized_detail):
             chunks.append({
                 'chunk_index': chunk_index,
                 'chunk_text': chunk
             })
             chunk_index += 1
     
-    return chunks if chunks else [{'chunk_index': 0, 'chunk_text': tour_name}]
+    return chunks if chunks else [{'chunk_index': 0, 'chunk_text': normalized_name or tour_name}]
