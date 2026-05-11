@@ -18,6 +18,54 @@ class RAGEngine:
         self.db = Database()
         self.llm = llm
 
+    def _detect_price_intent(self, query: str) -> str:
+        q = (query or "").lower()
+
+        cheapest_keywords = ["rẻ nhất", "thấp nhất", "giá thấp nhất", "ít tiền nhất", "tiết kiệm nhất"]
+        expensive_keywords = ["đắt nhất", "cao nhất", "giá cao nhất"]
+
+        if any(keyword in q for keyword in cheapest_keywords):
+            return "cheapest"
+        if any(keyword in q for keyword in expensive_keywords):
+            return "most_expensive"
+        return "none"
+
+    def _answer_price_rank_query(self, query: str, intent: str) -> dict:
+        ascending = intent == "cheapest"
+        ranked_rows = self.db.get_tours_ranked_by_price(ascending=ascending, limit=5)
+
+        if not ranked_rows:
+            return {
+                'answer': 'Xin lỗi, tôi chưa có dữ liệu giá tour để so sánh lúc này.',
+                'sources': []
+            }
+
+        top = ranked_rows[0]
+        label = "rẻ nhất" if ascending else "đắt nhất"
+        lines = [
+            f"Tour {label} hiện tại là {top['tour_name']} với giá {float(top['price']):,.0f} {top['currency']}.",
+            "Một số tour theo thứ tự giá để bạn tham khảo:"
+        ]
+        for idx, row in enumerate(ranked_rows, start=1):
+            lines.append(f"{idx}. {row['tour_name']} - {float(row['price']):,.0f} {row['currency']}")
+        lines.append("Vui lòng liên hệ để biết thêm thông tin về khuyến mãi hiện tại.")
+
+        sources = []
+        for row in ranked_rows[:3]:
+            sources.append({
+                'tour_id': row['tour_id'],
+                'tour_name': row['tour_name'],
+                'category': row.get('category', 'N/A'),
+                'price': float(row['price']),
+                'currency': row.get('currency', 'VND'),
+                'similarity': 1.0
+            })
+
+        return {
+            'answer': "\n".join(lines),
+            'sources': sources
+        }
+
     def retrieve_documents(self, query: str, top_k: int = TOP_K_RETRIEVAL) -> List[Dict]:
         try:
             query_embedding = get_embedding(query, task_type='retrieval_query')
@@ -87,6 +135,10 @@ Hãy trả lời bằng tiếng Việt, thân thiện và cung cấp thông tin 
     def answer_question(self, query: str) -> dict:
         """Execute retrieve, rank, and generate for one user question."""
         try:
+            price_intent = self._detect_price_intent(query)
+            if price_intent != "none":
+                return self._answer_price_rank_query(query, price_intent)
+
             documents = self.retrieve_documents(query, top_k=TOP_K_RETRIEVAL)
             
             if not documents:

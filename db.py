@@ -235,8 +235,41 @@ class Database:
             logger.error(f"Error getting tour IDs: {e}")
             return []
 
+    def get_tours_ranked_by_price(self, ascending: bool = True, limit: int = 5):
+        cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+        try:
+            sort_direction = "ASC" if ascending else "DESC"
+            cursor.execute(
+                f"""
+                WITH tours AS (
+                    SELECT
+                        tour_id,
+                        MAX(tour_name) AS tour_name,
+                        MAX(COALESCE(metadata->>'category', 'N/A')) AS category,
+                        MAX(COALESCE(metadata->>'currency', 'VND')) AS currency,
+                        MIN(
+                            CASE
+                                WHEN (metadata->>'price') IS NULL OR (metadata->>'price') = '' THEN NULL
+                                ELSE (metadata->>'price')::numeric
+                            END
+                        ) AS price
+                    FROM tour_embeddings
+                    GROUP BY tour_id
+                )
+                SELECT tour_id, tour_name, category, currency, price
+                FROM tours
+                WHERE price IS NOT NULL
+                ORDER BY price {sort_direction}, tour_id ASC
+                LIMIT %s;
+                """,
+                (limit,),
+            )
+            return cursor.fetchall()
+        except Exception as e:
+            logger.error(f"Error ranking tours by price: {e}")
+            return []
+
     def clear_embeddings(self, tour_id: int):
-        """Clear embeddings for a tour (for refresh)"""
         cursor = self.conn.cursor()
         try:
             cursor.execute("DELETE FROM tour_embeddings WHERE tour_id = %s;", (tour_id,))
@@ -246,7 +279,6 @@ class Database:
             self.conn.rollback()
 
     def save_chat_history(self, user_id: int, session_id: str, question: str, answer: str, source_tour_ids: list, tokens_used: int):
-        """Save chat interaction to history"""
         cursor = self.conn.cursor()
         try:
             cursor.execute("""
@@ -259,7 +291,6 @@ class Database:
             self.conn.rollback()
 
     def close(self):
-        """Close database connection"""
         if self.conn:
             self.conn.close()
             logger.info("Database connection closed")

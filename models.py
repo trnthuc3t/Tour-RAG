@@ -5,7 +5,6 @@ from datetime import datetime
 
 
 class TourData(BaseModel):
-    """Normalized tour payload returned by Odoo."""
     id: int
     name: str
     category: str
@@ -13,8 +12,8 @@ class TourData(BaseModel):
     currency: str
     description: str
     detail_information: str
-    full_text: str
-    image_url: str
+    full_text: Optional[str] = None
+    image_url: Optional[str] = None
     created_at: str
     updated_at: str
 
