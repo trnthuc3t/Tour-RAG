@@ -29,7 +29,7 @@ RERANK_TOP_K = int(os.getenv('RERANK_TOP_K', 3))
 
 # Service Configuration
 SERVICE_HOST = os.getenv('SERVICE_HOST', '0.0.0.0')
-SERVICE_PORT = int(os.getenv('SERVICE_PORT', 8000))
+SERVICE_PORT = int(os.getenv('SERVICE_PORT', 8001))
 SERVICE_WORKERS = int(os.getenv('SERVICE_WORKERS', 2))
 
 # Embedding output size used by both DB schema and embedding requests.
